@@ -1,0 +1,28 @@
+# Vigil Local Configuration & Credentials (CRITICAL)
+config.json
+
+# Post-Quantum Vault files & ephemeral decryption artifacts
+*.vigil
+vigil_dec_*
+*.csv
+*.txt
+
+# AI IDS / Telemetry Logs
+*.log
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# OS / Editor Artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
