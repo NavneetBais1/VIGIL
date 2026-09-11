@@ -5,7 +5,7 @@ config.json
 *.vigil
 vigil_dec_*
 *.csv
-*.txt
+
 
 # AI IDS / Telemetry Logs
 *.log
