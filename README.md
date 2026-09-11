@@ -1,14 +1,13 @@
-```markdown
 <div align="center">
-
-```text
+<pre>
  __      __ _____   ____  _____  _      
  \ \    / /|_   _| / ___||_   _|| |     
   \ \  / /   | |  | |  _   | |  | |     
    \ \/ /   _| |_ | |_| | _| |_ | |___  
     \__/   |_____| \____||_____||_____| 
 
-```
+</pre>
+</div>
 
 ### **Autonomous AI-Driven Threat Detection & Post-Quantum Cryptographic Vault**
 
