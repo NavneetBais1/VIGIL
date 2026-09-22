@@ -29,8 +29,15 @@ class AIIDSEngine(QThread):
         self.ip_port_tracker = defaultdict(set)
         self.last_reset = time.time()
 
-        # Pre-trained AI Anomaly Detector
-        self.model = IsolationForest(contamination=0.1, random_state=42)
+        # Known naturally-encrypted transport ports (exempt from raw entropy alerts)
+        self.encrypted_ports = {22, 443, 8443, 990, 993, 995}
+
+        # Tuned thresholds
+        self.port_scan_threshold = 25
+        self.syn_flood_threshold = 50
+
+        # Pre-trained AI Anomaly Detector (Calibrated outlier contamination rate)
+        self.model = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
         dummy_training_data = np.random.normal(loc=[500, 80, 6], scale=[200, 50, 2], size=(300, 3))
         self.model.fit(dummy_training_data)
 
@@ -74,35 +81,36 @@ class AIIDSEngine(QThread):
                 is_anomaly = False
                 reasons = []
 
-                # 1. Port Scan Check
+                # 1. Port Scan Check (Tuned to 25 distinct ports)
                 if self.detect_port_scan and dport:
                     self.ip_port_tracker[src_ip].add(dport)
-                    if len(self.ip_port_tracker[src_ip]) > 15:
+                    if len(self.ip_port_tracker[src_ip]) > self.port_scan_threshold:
                         is_anomaly = True
-                        reasons.append(f"Port-Scan pattern detected (>15 ports hit)")
+                        reasons.append(f"Port-Scan pattern detected (>{self.port_scan_threshold} ports hit)")
 
-                # 2. SYN Flood Check
+                # 2. SYN Flood Check (Tuned to 50 SYN packets)
                 if self.detect_syn_flood and packet.haslayer(TCP):
                     flags = packet[TCP].flags
                     if flags == 'S':  # SYN
                         self.ip_syn_counter[src_ip] += 1
-                        if self.ip_syn_counter[src_ip] > 20:
+                        if self.ip_syn_counter[src_ip] > self.syn_flood_threshold:
                             is_anomaly = True
-                            reasons.append(f"SYN Flood signature detected")
+                            reasons.append(f"SYN Flood signature detected (>{self.syn_flood_threshold} SYNs)")
 
-                # 3. Payload Entropy (Encrypted shellcode / C2 beaconing check)
+                # 3. Payload Entropy (Bypass encrypted protocols like SSH/HTTPS, inspect unencrypted streams)
                 if self.detect_payload_entropy and packet.haslayer(Raw):
-                    payload = packet[Raw].load
-                    entropy = self.calculate_entropy(payload)
-                    if entropy > 7.4 and len(payload) > 64:
-                        is_anomaly = True
-                        reasons.append(f"High Entropy Payload ({entropy:.2f} bits)")
+                    if dport not in self.encrypted_ports and sport not in self.encrypted_ports:
+                        payload = packet[Raw].load
+                        entropy = self.calculate_entropy(payload)
+                        if entropy > 7.6 and len(payload) > 64:
+                            is_anomaly = True
+                            reasons.append(f"High Entropy Payload ({entropy:.2f} bits)")
 
                 # 4. AI Machine Learning Anomaly Classifier
                 if self.enable_ai_classifier:
                     features = np.array([[pkt_len, dport if dport < 65535 else 80, proto]])
                     prediction = self.model.predict(features)[0]
-                    if prediction == -1 and (pkt_len > 1400 or pkt_len < 40):
+                    if prediction == -1 and (pkt_len > 1450 or pkt_len < 30):
                         is_anomaly = True
                         reasons.append("ML IsolationForest Anomaly Vector")
 
@@ -120,10 +128,11 @@ class AIIDSEngine(QThread):
             # Fallback simulated capture mode if packet driver lacks root/promiscuous privilege
             while self.running:
                 time.sleep(1.2)
-                simulated_anomaly = random.random() < 0.2
+                # Reduced synthetic anomaly probability to 2% to reflect realistic networks
+                simulated_anomaly = random.random() < 0.02
                 src = f"192.168.1.{random.randint(10, 200)}"
                 dst = f"10.0.0.{random.randint(1, 10)}"
-                dport = random.choice([80, 443, 22, 445, 8080, 3389, 23])
+                dport = random.choice([80, 443, 22, 990, 993, 995, 445, 8080, 3389, 23])
                 
                 if simulated_anomaly:
                     reason = random.choice(["Port Scan Probe", "SYN Flood Threshold Exceeded", "Suspicious Payload Entropy", "AI Outlier Score"])
