@@ -79,7 +79,7 @@ class PostQuantumFileVault:
         key = cls._derive_pq_key(password, salt)
         aesgcm = AESGCM(key)
         
-        # Authenticated decryption (Throws InvalidTag on wrong password)
+        # Authenticated decryption 
         plaintext = aesgcm.decrypt(nonce, ciphertext, cls.MAGIC_HEADER)
 
         # Determine original extension (e.g. .txt or .csv)

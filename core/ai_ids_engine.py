@@ -29,14 +29,14 @@ class AIIDSEngine(QThread):
         self.ip_port_tracker = defaultdict(set)
         self.last_reset = time.time()
 
-        # Known naturally-encrypted transport ports (exempt from raw entropy alerts)
+        # Known naturally-encrypted transport ports
         self.encrypted_ports = {22, 443, 8443, 990, 993, 995}
 
         # Tuned thresholds
         self.port_scan_threshold = 25
         self.syn_flood_threshold = 50
 
-        # Pre-trained AI Anomaly Detector (Calibrated outlier contamination rate)
+        # Pre-trained AI Anomaly Detector 
         self.model = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
         dummy_training_data = np.random.normal(loc=[500, 80, 6], scale=[200, 50, 2], size=(300, 3))
         self.model.fit(dummy_training_data)
@@ -97,7 +97,7 @@ class AIIDSEngine(QThread):
                             is_anomaly = True
                             reasons.append(f"SYN Flood signature detected (>{self.syn_flood_threshold} SYNs)")
 
-                # 3. Payload Entropy (Bypass encrypted protocols like SSH/HTTPS, inspect unencrypted streams)
+                # 3. Payload Entropy
                 if self.detect_payload_entropy and packet.haslayer(Raw):
                     if dport not in self.encrypted_ports and sport not in self.encrypted_ports:
                         payload = packet[Raw].load
