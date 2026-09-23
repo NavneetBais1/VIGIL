@@ -87,13 +87,11 @@ class AnimatedEyeToggle(QWidget):
         lower_path.quadTo(QPointF(cx, cy + lower_height), QPointF(cx + 9, cy))
         p.drawPath(lower_path)
 
-        # 3. Center Iris / Pupil
         pupil_radius = 2.2 + (0.6 * t)
         p.setBrush(line_color)
         p.drawEllipse(QPointF(cx, cy), pupil_radius, pupil_radius)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # 4. Radiating lashes when open
         if t > 0.3:
             lash_pen = QPen(dim_color, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
             lash_pen.setColor(QColor(0, 240, 192, int(220 * (t - 0.3) / 0.7)))
@@ -103,7 +101,6 @@ class AnimatedEyeToggle(QWidget):
             p.drawLine(QPointF(cx, cy - upper_height), QPointF(cx, cy - upper_height - 4))
             p.drawLine(QPointF(cx + 6, cy - upper_height + 1), QPointF(cx + 9, cy - upper_height - 3))
 
-        # 5. Strike slash when closed
         if t < 0.85:
             slash_alpha = int(255 * (1.0 - (t / 0.85)))
             slash_pen = QPen(QColor(0, 240, 192, slash_alpha), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)

@@ -1,15 +1,12 @@
 import time
 import math
-import random
-import numpy as np
 from collections import defaultdict
 from PyQt6.QtCore import QThread, pyqtSignal
-from sklearn.ensemble import IsolationForest
 
 class AIIDSEngine(QThread):
     """
     Multi-Vector AI Intrusion Detection Engine.
-    Uses Scapy for packet analysis with statistical entropy and Isolation Forest anomaly classification.
+    High-performance, non-blocking packet analysis engine with adaptive baseline learning.
     """
     log_signal = pyqtSignal(str, bool)  # message, is_suspicious
 
@@ -29,44 +26,70 @@ class AIIDSEngine(QThread):
         self.ip_port_tracker = defaultdict(set)
         self.last_reset = time.time()
 
-        # Known naturally-encrypted transport ports
-        self.encrypted_ports = {22, 443, 8443, 990, 993, 995}
+        # Legitimate high-entropy or compressed application ports
+        # 8080, 8000 frequently carry gzip/deflate compressed HTTP or WebSockets
+        self.high_entropy_exempt_ports = {22, 443, 8443, 990, 993, 995, 8080, 8000}
 
-        # Tuned thresholds
-        self.port_scan_threshold = 25
-        self.syn_flood_threshold = 50
+        # Calibrated Heuristic Thresholds
+        self.port_scan_threshold = 20
+        self.syn_flood_threshold = 40
 
-        # Pre-trained AI Anomaly Detector 
-        self.model = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
-        dummy_training_data = np.random.normal(loc=[500, 80, 6], scale=[200, 50, 2], size=(300, 3))
-        self.model.fit(dummy_training_data)
+        # Lazy ML state (initialized in background thread to guarantee fast GUI boot)
+        self.model = None
+        self.np = None
+        self.training_buffer = []
+        self.is_trained = False
+
+    def _init_ml_engine(self):
+        """Lazy loads ML libraries in worker thread to eliminate startup lag."""
+        if self.model is None:
+            try:
+                import numpy as np
+                from sklearn.ensemble import IsolationForest
+                self.np = np
+                self.model = IsolationForest(
+                    n_estimators=100, 
+                    contamination=0.01, 
+                    random_state=42, 
+                    warm_start=True
+                )
+            except Exception as e:
+                self.log_signal.emit(f"[*] ML Module initialization bypassed: {e}", False)
 
     def calculate_entropy(self, data: bytes) -> float:
-        if not data:
+        if not data or len(data) < 64:
             return 0.0
-        entropy = 0
-        for x in range(256):
-            p_x = float(data.count(bytes([x]))) / len(data)
-            if p_x > 0:
-                entropy += - p_x * math.log2(p_x)
+        entropy = 0.0
+        length = len(data)
+        byte_counts = [0] * 256
+        for b in data:
+            byte_counts[b] += 1
+        for count in byte_counts:
+            if count > 0:
+                p_x = count / length
+                entropy -= p_x * math.log2(p_x)
         return entropy
 
     def run(self):
         self.running = True
+        self.log_signal.emit("[*] AI-IDS Core initializing background worker...", False)
+        
+        self._init_ml_engine()
         self.log_signal.emit("[*] AI-IDS Core activated. Sniffing live traffic...", False)
 
         try:
             from scapy.all import sniff, IP, TCP, UDP, Raw
-            
+
             def process_packet(packet):
                 if not self.running:
                     return
 
-                # Rate tracking reset every 5 seconds
-                if time.time() - self.last_reset > 5:
+                # Reset rate trackers every 5 seconds
+                current_time = time.time()
+                if current_time - self.last_reset > 5.0:
                     self.ip_syn_counter.clear()
                     self.ip_port_tracker.clear()
-                    self.last_reset = time.time()
+                    self.last_reset = current_time
 
                 if not packet.haslayer(IP):
                     return
@@ -81,64 +104,67 @@ class AIIDSEngine(QThread):
                 is_anomaly = False
                 reasons = []
 
-                # 1. Port Scan Check (Tuned to 25 distinct ports)
+                # 1. Port Scan Detection (Tracks unique destination ports accessed per IP)
                 if self.detect_port_scan and dport:
                     self.ip_port_tracker[src_ip].add(dport)
                     if len(self.ip_port_tracker[src_ip]) > self.port_scan_threshold:
                         is_anomaly = True
-                        reasons.append(f"Port-Scan pattern detected (>{self.port_scan_threshold} ports hit)")
+                        reasons.append(f"Port-Scan Sweep (>{self.port_scan_threshold} targets)")
 
-                # 2. SYN Flood Check (Tuned to 50 SYN packets)
+                # 2. SYN Flood Heuristic (Monitors rapid half-open TCP states)
                 if self.detect_syn_flood and packet.haslayer(TCP):
                     flags = packet[TCP].flags
-                    if flags == 'S':  # SYN
+                    # Check exclusively for SYN flag without ACK
+                    if flags == 'S' or flags == 0x02:
                         self.ip_syn_counter[src_ip] += 1
                         if self.ip_syn_counter[src_ip] > self.syn_flood_threshold:
                             is_anomaly = True
-                            reasons.append(f"SYN Flood signature detected (>{self.syn_flood_threshold} SYNs)")
+                            reasons.append(f"SYN Flood Signature (>{self.syn_flood_threshold} SYNs/5s)")
 
-                # 3. Payload Entropy
+                # 3. Payload Entropy Inspection (Checks for obfuscated shellcode/c2 beacons)
                 if self.detect_payload_entropy and packet.haslayer(Raw):
-                    if dport not in self.encrypted_ports and sport not in self.encrypted_ports:
+                    if dport not in self.high_entropy_exempt_ports and sport not in self.high_entropy_exempt_ports:
                         payload = packet[Raw].load
                         entropy = self.calculate_entropy(payload)
-                        if entropy > 7.6 and len(payload) > 64:
+                        # Threshold tuned to 7.75 bits (pure randomness/raw encrypted shellcode)
+                        if entropy > 7.75:
                             is_anomaly = True
-                            reasons.append(f"High Entropy Payload ({entropy:.2f} bits)")
+                            reasons.append(f"Suspicious Shellcode Entropy ({entropy:.2f} bits)")
 
-                # 4. AI Machine Learning Anomaly Classifier
-                if self.enable_ai_classifier:
-                    features = np.array([[pkt_len, dport if dport < 65535 else 80, proto]])
-                    prediction = self.model.predict(features)[0]
-                    if prediction == -1 and (pkt_len > 1450 or pkt_len < 30):
-                        is_anomaly = True
-                        reasons.append("ML IsolationForest Anomaly Vector")
+                # 4. Adaptive IsolationForest Anomaly Detection
+                if self.enable_ai_classifier and self.model is not None:
+                    feat = [pkt_len, min(dport, 65535), proto]
+                    if not self.is_trained:
+                        self.training_buffer.append(feat)
+                        if len(self.training_buffer) >= 60:
+                            train_matrix = self.np.array(self.training_buffer)
+                            self.model.fit(train_matrix)
+                            self.is_trained = True
+                            self.training_buffer.clear()
+                    else:
+                        features = self.np.array([feat])
+                        prediction = self.model.predict(features)[0]
+                        if prediction == -1 and (pkt_len > 1460 or pkt_len < 28):
+                            is_anomaly = True
+                            reasons.append("ML IsolationForest Anomaly Vector")
 
-                # Emit formatted log
+                # Emit structured telemetry
                 if is_anomaly:
-                    msg = f"[ALERT] INTRUSION BLOCKED | {src_ip}:{sport} -> {dst_ip}:{dport} | Reason: {', '.join(reasons)}"
+                    msg = f"[ALERT] INTRUSION DETECTED | {src_ip}:{sport} -> {dst_ip}:{dport} | Reason: {', '.join(reasons)}"
                     self.log_signal.emit(msg, True)
                 else:
                     msg = f"[NORMAL] {src_ip}:{sport} -> {dst_ip}:{dport} | Proto: {proto} | Size: {pkt_len}B"
                     self.log_signal.emit(msg, False)
 
-            sniff(prn=process_packet, store=False, stop_filter=lambda _: not self.running, timeout=1)
-
-        except Exception:
-            # Fallback simulated capture mode if packet driver lacks root/promiscuous privilege
+            # Continuous live sniffing loop
             while self.running:
-                time.sleep(1.2)
-                # Reduced synthetic anomaly probability to 2% to reflect realistic networks
-                simulated_anomaly = random.random() < 0.02
-                src = f"192.168.1.{random.randint(10, 200)}"
-                dst = f"10.0.0.{random.randint(1, 10)}"
-                dport = random.choice([80, 443, 22, 990, 993, 995, 445, 8080, 3389, 23])
-                
-                if simulated_anomaly:
-                    reason = random.choice(["Port Scan Probe", "SYN Flood Threshold Exceeded", "Suspicious Payload Entropy", "AI Outlier Score"])
-                    self.log_signal.emit(f"[ALERT] {src} -> {dst}:{dport} | Triggered: {reason}", True)
-                else:
-                    self.log_signal.emit(f"[NORMAL] {src} -> {dst}:{dport} | Verified Safe | Size: {random.randint(64, 1500)}B", False)
+                sniff(prn=process_packet, store=False, stop_filter=lambda _: not self.running, timeout=1.0)
+
+        except PermissionError:
+            self.log_signal.emit("[!] Access Denied: Administrator/Root privileges required for live packet sniffing.", True)
+        except Exception as e:
+            self.log_signal.emit(f"[!] Live Sniffer Interface Error: {str(e)}", True)
+            self.log_signal.emit("[*] Ensure Npcap (Windows) or libpcap (Linux) is installed and active.", False)
 
     def stop(self):
         self.running = False
