@@ -78,8 +78,12 @@ class AIIDSEngine(QThread):
         self.log_signal.emit("[*] AI-IDS Core activated. Sniffing live traffic...", False)
 
         try:
-            from scapy.all import sniff, IP, TCP, UDP, Raw
+            from scapy.all import sniff, IP, TCP, UDP, Raw, conf
+            from scapy.layers.inet import conf as inet_conf
 
+            # Fallback to Layer 3 native socket if Npcap/WinPcap is not installed
+            if conf.L3socket is not None:
+                conf.L3socket = inet_conf.L3socket
             def process_packet(packet):
                 if not self.running:
                     return
@@ -158,7 +162,13 @@ class AIIDSEngine(QThread):
 
             # Continuous live sniffing loop
             while self.running:
-                sniff(prn=process_packet, store=False, stop_filter=lambda _: not self.running, timeout=1.0)
+                sniff(
+                    prn=process_packet, 
+                    store=False, 
+                    stop_filter=lambda _: not self.running, 
+                    timeout=1.0,
+                    L2socket=conf.L3socket  # Fallback to Layer 3 socket
+                )
 
         except PermissionError:
             self.log_signal.emit("[!] Access Denied: Administrator/Root privileges required for live packet sniffing.", True)
