@@ -2,6 +2,9 @@ import time
 import math
 from collections import defaultdict
 from PyQt6.QtCore import QThread, pyqtSignal
+import logging
+# Suppress scapy internal verbose warnings
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
 class AIIDSEngine(QThread):
     """
@@ -71,6 +74,10 @@ class AIIDSEngine(QThread):
         return entropy
 
     def run(self):
+        from scapy.all import sniff, IP, TCP, UDP, Raw, conf
+
+        # Set scapy verbosity to 0
+        conf.verb = 0
         self.running = True
         self.log_signal.emit("[*] AI-IDS Core initializing background worker...", False)
         
