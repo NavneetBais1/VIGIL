@@ -7,7 +7,7 @@ from core.auth_manager import AuthManager
 
 class VaultView(QWidget):
     """
-    Post-Quantum File Encrypter and Vault.
+    Post-Quantum Hybrid File Vault.
     Guarantees that only explicitly user-selected files via '+' are modified.
     """
     def __init__(self, auth_manager: AuthManager, parent=None):
@@ -21,7 +21,7 @@ class VaultView(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
 
-        title = QLabel("Post-Quantum File Encrypter & Vault")
+        title = QLabel("Post-Quantum Hybrid File Vault")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         layout.addWidget(title)
 
@@ -55,7 +55,7 @@ class VaultView(QWidget):
         ops_layout.addWidget(self.pw_input)
 
         btn_row = QHBoxLayout()
-        self.encrypt_btn = QPushButton("🔒  Encrypt File (Post-Quantum Hybrid)")
+        self.encrypt_btn = QPushButton("🔒  Encrypt File (ML-KEM-768 + AES-256-GCM)")
         self.encrypt_btn.setProperty("class", "action-btn")
         self.encrypt_btn.clicked.connect(self._encrypt_action)
         btn_row.addWidget(self.encrypt_btn)
@@ -92,7 +92,7 @@ class VaultView(QWidget):
 
         try:
             out_file = PostQuantumFileVault.encrypt_file(self.selected_file_path, pw)
-            QMessageBox.information(self, "Encrypted", f"File encrypted under Post-Quantum Hybrid Envelope:\n{out_file}")
+            QMessageBox.information(self, "Encrypted", f"File encrypted using ML-KEM-768 + AES-256-GCM:\n{out_file}")
             self.pw_input.clear()
             self._choose_file_manual(out_file)
         except Exception as e:

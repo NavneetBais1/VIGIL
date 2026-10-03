@@ -1,19 +1,25 @@
-import hashlib
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QPushButton, QMessageBox, QFrame, QApplication
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QMessageBox,
+    QFrame,
+    QApplication,
 )
 from PyQt6.QtCore import Qt
 from core.auth_manager import AuthManager
 
 
 class MasterResetAuthModal(QDialog):
-    """Custom OLED security modal requiring master password to authorize a factory reset."""
+    """Require the current master password before a factory reset."""
+
     def __init__(self, auth_manager: AuthManager, parent=None):
         super().__init__(parent)
         self.auth_manager = auth_manager
         self.confirmed = False
-        
         self.setWindowTitle("Authorize System Wipe")
         self.setFixedSize(460, 260)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
@@ -28,9 +34,8 @@ class MasterResetAuthModal(QDialog):
         warning_title.setStyleSheet("color: #ff3366; font-size: 15px; font-weight: bold;")
         layout.addWidget(warning_title)
 
-        msg = QLabel("Enter your Master Password to wipe all keys, configuration, and security credentials permanently.")
+        msg = QLabel("Enter your Master Password to permanently remove Vigil's local authentication configuration.")
         msg.setWordWrap(True)
-        msg.setStyleSheet("color: #ffffff; font-size: 13px; line-height: 1.4;")
         layout.addWidget(msg)
 
         self.pw_input = QLineEdit()
@@ -38,36 +43,30 @@ class MasterResetAuthModal(QDialog):
         self.pw_input.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.pw_input)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-
+        row = QHBoxLayout()
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setProperty("class", "action-btn")
-        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(self.cancel_btn)
+        row.addWidget(self.cancel_btn)
 
         self.wipe_btn = QPushButton("Confirm Wipe")
         self.wipe_btn.setProperty("class", "danger-btn")
-        self.wipe_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.wipe_btn.clicked.connect(self._verify_and_execute)
-        btn_row.addWidget(self.wipe_btn)
-
-        layout.addLayout(btn_row)
+        row.addWidget(self.wipe_btn)
+        layout.addLayout(row)
 
     def _verify_and_execute(self):
-        entered_pw = self.pw_input.text()
-        if not self.auth_manager.verify_password(entered_pw):
+        if not self.auth_manager.verify_password(self.pw_input.text()):
             QMessageBox.critical(self, "Access Denied", "Incorrect Master Password. Wipe aborted.")
             self.pw_input.clear()
             return
-        
         self.confirmed = True
         self.accept()
 
 
 class SettingsDialog(QDialog):
-    """Settings interface with adjusted sizing and password verification for resets."""
+    """Settings for changing authentication credentials and resetting local state."""
+
     def __init__(self, auth_manager: AuthManager, parent=None):
         super().__init__(parent)
         self.auth_manager = auth_manager
@@ -84,15 +83,10 @@ class SettingsDialog(QDialog):
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #00f0c0;")
         layout.addWidget(title)
 
-        # 1. Update Master Password
         pw_card = QFrame()
         pw_card.setProperty("class", "card")
         pw_layout = QVBoxLayout(pw_card)
-        pw_layout.setSpacing(10)
-
-        pw_label = QLabel("Update Master Password:")
-        pw_label.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 13px;")
-        pw_layout.addWidget(pw_label)
+        pw_layout.addWidget(QLabel("Update Master Password:"))
 
         self.curr_pw = QLineEdit()
         self.curr_pw.setPlaceholderText("Current Password")
@@ -100,87 +94,90 @@ class SettingsDialog(QDialog):
         pw_layout.addWidget(self.curr_pw)
 
         self.new_pw = QLineEdit()
-        self.new_pw.setPlaceholderText("New Master Password")
+        self.new_pw.setPlaceholderText("New Master Password (12+ characters)")
         self.new_pw.setEchoMode(QLineEdit.EchoMode.Password)
         pw_layout.addWidget(self.new_pw)
 
+        self.confirm_new_pw = QLineEdit()
+        self.confirm_new_pw.setPlaceholderText("Confirm New Master Password")
+        self.confirm_new_pw.setEchoMode(QLineEdit.EchoMode.Password)
+        pw_layout.addWidget(self.confirm_new_pw)
+
         self.save_pw_btn = QPushButton("Update Password")
         self.save_pw_btn.setProperty("class", "action-btn")
-        self.save_pw_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_pw_btn.clicked.connect(self._handle_password_change)
         pw_layout.addWidget(self.save_pw_btn)
         layout.addWidget(pw_card)
 
-        # 2. Update Security Recovery Question
         rec_card = QFrame()
         rec_card.setProperty("class", "card")
         rec_layout = QVBoxLayout(rec_card)
-        rec_layout.setSpacing(10)
-
-        rec_label = QLabel("Update Security Question / Answer:")
-        rec_label.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 13px;")
-        rec_layout.addWidget(rec_label)
+        rec_layout.addWidget(QLabel("Update Recovery Question / Answer:"))
 
         self.new_q = QLineEdit()
         self.new_q.setPlaceholderText("New Security Question")
         rec_layout.addWidget(self.new_q)
 
         self.new_a = QLineEdit()
-        self.new_a.setPlaceholderText("New Secret Answer (ignores spaces & case)")
+        self.new_a.setPlaceholderText("New Secret Answer")
+        self.new_a.setEchoMode(QLineEdit.EchoMode.Password)
         rec_layout.addWidget(self.new_a)
 
         self.save_rec_btn = QPushButton("Save Recovery Question")
         self.save_rec_btn.setProperty("class", "action-btn")
-        self.save_rec_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_rec_btn.clicked.connect(self._handle_recovery_change)
         rec_layout.addWidget(self.save_rec_btn)
         layout.addWidget(rec_card)
 
-        # 3. Master Reset
         reset_card = QFrame()
         reset_card.setProperty("class", "card")
         reset_layout = QVBoxLayout(reset_card)
-        reset_layout.setSpacing(10)
-
-        reset_label = QLabel("Factory Reset Suite:")
-        reset_label.setStyleSheet("color: #ff3366; font-weight: bold; font-size: 13px;")
-        reset_layout.addWidget(reset_label)
-
+        reset_layout.addWidget(QLabel("Factory Reset Suite:"))
         self.reset_btn = QPushButton("⚠️ Master Reset & Wipe Suite")
         self.reset_btn.setProperty("class", "danger-btn")
-        self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reset_btn.clicked.connect(self._handle_master_reset)
         reset_layout.addWidget(self.reset_btn)
         layout.addWidget(reset_card)
 
     def _handle_password_change(self):
-        c_pw = self.curr_pw.text()
-        n_pw = self.new_pw.text().strip()
+        current = self.curr_pw.text()
+        new = self.new_pw.text()
+        confirm = self.confirm_new_pw.text()
 
-        if not self.auth_manager.verify_password(c_pw):
+        if not self.auth_manager.verify_password(current):
             QMessageBox.warning(self, "Verification Failed", "Current password does not match.")
             return
-        if len(n_pw) < 4:
-            QMessageBox.warning(self, "Invalid Length", "New password must be at least 4 characters.")
+        if len(new) < 12:
+            QMessageBox.warning(self, "Invalid Length", "New password must be at least 12 characters.")
+            return
+        if new != confirm:
+            QMessageBox.warning(self, "Mismatch", "New passwords do not match.")
             return
 
-        self.auth_manager.update_password_only(n_pw)
+        try:
+            self.auth_manager.update_password_only(new)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(self, "Update Failed", str(exc))
+            return
+
         QMessageBox.information(self, "Success", "Master password has been updated.")
         self.curr_pw.clear()
         self.new_pw.clear()
+        self.confirm_new_pw.clear()
 
     def _handle_recovery_change(self):
-        q = self.new_q.text().strip()
-        a = self.new_a.text().strip()
-        if not q or not a:
+        question = self.new_q.text().strip()
+        answer = self.new_a.text()
+        if not question or not answer:
             QMessageBox.warning(self, "Input Missing", "Both question and answer are required.")
             return
 
-        self.auth_manager.config["security_question"] = q
-        salt = self.auth_manager.config.get("salt", "")
-        norm_ans = self.auth_manager._normalize_answer(a)
-        self.auth_manager.config["security_answer_hash"] = hashlib.sha256((norm_ans + salt).encode()).hexdigest()
-        self.auth_manager.save_config()
+        try:
+            self.auth_manager.update_security_credentials(question, answer)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(self, "Update Failed", str(exc))
+            return
+
         QMessageBox.information(self, "Success", "Recovery credentials updated successfully.")
         self.new_q.clear()
         self.new_a.clear()
@@ -188,10 +185,10 @@ class SettingsDialog(QDialog):
     def _handle_master_reset(self):
         modal = MasterResetAuthModal(self.auth_manager, self)
         if modal.exec() == QDialog.DialogCode.Accepted and modal.confirmed:
-            self.auth_manager.reset_all_data()
-            QMessageBox.information(
-                self, 
-                "System Wiped", 
-                "All settings, passwords, and encryption configs have been deleted.\n\nThe application will now close."
-            )
+            try:
+                self.auth_manager.reset_all_data()
+            except OSError as exc:
+                QMessageBox.critical(self, "Reset Failed", f"Could not remove local configuration: {exc}")
+                return
+            QMessageBox.information(self, "System Wiped", "Local authentication configuration has been removed. Vigil will close.")
             QApplication.quit()

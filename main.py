@@ -74,7 +74,7 @@ class VigilMainWindow(QMainWindow):
         side_layout.addWidget(self.btn_ids)
         self.nav_buttons.append(self.btn_ids)
 
-        self.btn_vault = QPushButton("🔐  Post-Quantum Vault")
+        self.btn_vault = QPushButton("🔐  Secure File Vault")
         self.btn_vault.setProperty("class", "nav-btn")
         self.btn_vault.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_vault.clicked.connect(lambda: self._switch_tab(1))

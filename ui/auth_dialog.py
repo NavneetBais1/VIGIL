@@ -225,8 +225,8 @@ class StartupAuthDialog(QDialog):
             QMessageBox.warning(self, "Setup Incomplete", "Please complete all fields.")
             return
 
-        if len(pw) < 4:
-            QMessageBox.warning(self, "Password Too Short", "Password must be at least 4 characters long.")
+        if len(pw) < 12:
+            QMessageBox.warning(self, "Password Too Short", "Password must be at least 12 characters long.")
             return
 
         if pw != pw_c:
@@ -241,7 +241,11 @@ class StartupAuthDialog(QDialog):
             self.ans_confirm.clear()
             return
 
-        self.auth_manager.set_credentials(pw, q, ans)
+        try:
+            self.auth_manager.set_credentials(pw, q, ans)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(self, "Initialization Failed", str(exc))
+            return
         QMessageBox.information(self, "Initialized", "Vigil Security Profile generated successfully.")
         self.accept()
 
